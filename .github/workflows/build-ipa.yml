@@ -1,0 +1,64 @@
+name: Build Unsigned iPad .IPA for Sideloading
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    name: Build iOS .IPA (Sideloadly / AltStore / SideStore)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Generate native iOS project (Expo Prebuild)
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Install CocoaPods
+        working-directory: ios
+        run: pod install
+
+      - name: Build Release .app (Unsigned for Sideloading)
+        working-directory: ios
+        run: |
+          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          echo "Building Workspace: $WORKSPACE | Scheme: $SCHEME"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            clean build
+
+      - name: Package .app into Pictionary-iPad.ipa
+        run: |
+          mkdir -p build_ipa/Payload
+          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -name "*.app" -type d | head -n 1)
+          echo "Found built app at: $APP_PATH"
+          cp -R "$APP_PATH" build_ipa/Payload/
+          cd build_ipa
+          zip -r -9 ../Pictionary-iPad.ipa Payload
+
+      - name: Upload Pictionary-iPad.ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pictionary-iPad-IPA
+          path: Pictionary-iPad.ipa
+          retention-days: 30

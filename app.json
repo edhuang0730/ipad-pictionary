@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Pictionary Party",
+    "slug": "pictionary-ipad-party",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "ios": {
+      "supportsTablet": true,
+      "isTabletOnly": false,
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.pictionary.ipadparty",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Pictionary Party hosts a local game server on your Wi-Fi network so players can connect with their phones by scanning the QR code.",
+        "NSBonjourServices": [
+          "_http._tcp"
+        ],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        },
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "LANDSCAPE"
+        }
+      ]
+    ]
+  }
+}
