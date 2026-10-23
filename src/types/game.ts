@@ -21,6 +21,17 @@ export interface Point {
   y: number;
 }
 
+export interface FillRect {
+  /** Normalized X coordinate (0.0 to 1.0) */
+  x: number;
+  /** Normalized Y coordinate (0.0 to 1.0) */
+  y: number;
+  /** Normalized width (0.0 to 1.0) */
+  w: number;
+  /** Normalized height (0.0 to 1.0) */
+  h: number;
+}
+
 export interface Stroke {
   id: string;
   color: string;
@@ -28,6 +39,10 @@ export interface Stroke {
   width: number;
   points: Point[];
   isEraser?: boolean;
+  /** True when this stroke represents a bucket flood-fill operation */
+  isFill?: boolean;
+  /** Vertically-merged normalized rectangles representing the flood-filled region */
+  fillRects?: FillRect[];
 }
 
 export interface Player {

@@ -9,9 +9,13 @@ import {
 } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Point, Stroke } from '../types/game';
+import { computeFloodFillRects, fillRectsToSvgPath } from '../utils/floodFill';
+
+export type DrawingTool = 'brush' | 'fill' | 'eraser';
 
 export const PALETTE_COLORS = [
   '#111827', // Black
+  '#FFFFFF', // White
   '#EF4444', // Red
   '#F97316', // Orange
   '#EAB308', // Yellow
@@ -80,7 +84,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 }) => {
   const [selectedColor, setSelectedColor] = useState<string>(PALETTE_COLORS[0]);
   const [selectedSizeIdx, setSelectedSizeIdx] = useState<number>(1);
-  const [isEraser, setIsEraser] = useState<boolean>(false);
+  const [activeTool, setActiveTool] = useState<DrawingTool>('brush');
   const [canvasLayout, setCanvasLayout] = useState<{
     width: number;
     height: number;
@@ -109,9 +113,31 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const handleTouchStart = (e: GestureResponderEvent) => {
     const pt = extractNormalizedPoint(e);
     const strokeId = `st_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+    if (activeTool === 'fill') {
+      activeStrokeIdRef.current = null;
+      lastPointRef.current = null;
+      const fillRects = computeFloodFillRects(strokes, pt, selectedColor);
+      if (!fillRects || fillRects.length === 0) {
+        return;
+      }
+      const fillStroke: Stroke = {
+        id: strokeId,
+        color: selectedColor,
+        width: 0,
+        points: [pt],
+        isFill: true,
+        fillRects,
+      };
+      onStrokeStart(fillStroke);
+      onStrokeEnd(strokeId);
+      return;
+    }
+
     activeStrokeIdRef.current = strokeId;
     lastPointRef.current = pt;
 
+    const isEraser = activeTool === 'eraser';
     const brushWidth = BRUSH_SIZES[selectedSizeIdx].normalizedWidth;
     const newStroke: Stroke = {
       id: strokeId,
@@ -170,6 +196,21 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           style={StyleSheet.absoluteFill}
         >
           {strokes.map((stroke) => {
+            if (stroke.isFill && stroke.fillRects) {
+              return (
+                <Path
+                  key={stroke.id}
+                  d={fillRectsToSvgPath(
+                    stroke.fillRects,
+                    canvasLayout.width,
+                    canvasLayout.height
+                  )}
+                  fill={stroke.color}
+                  stroke="none"
+                />
+              );
+            }
+
             const strokePx = Math.max(
               2,
               stroke.width * canvasLayout.width
@@ -212,12 +253,14 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         {/* Color Swatches */}
         <View style={styles.colorRow}>
           {PALETTE_COLORS.map((hex) => {
-            const active = !isEraser && selectedColor === hex;
+            const active = activeTool !== 'eraser' && selectedColor === hex;
             return (
               <TouchableOpacity
                 key={hex}
                 onPress={() => {
-                  setIsEraser(false);
+                  if (activeTool === 'eraser') {
+                    setActiveTool('brush');
+                  }
                   setSelectedColor(hex);
                 }}
                 style={[
@@ -235,11 +278,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         {/* Brush Sizes */}
         <View style={styles.toolGroup}>
           {BRUSH_SIZES.map((sz, idx) => {
-            const active = selectedSizeIdx === idx;
+            const active = activeTool !== 'fill' && selectedSizeIdx === idx;
             return (
               <TouchableOpacity
                 key={sz.label}
-                onPress={() => setSelectedSizeIdx(idx)}
+                onPress={() => {
+                  if (activeTool === 'fill') {
+                    setActiveTool('brush');
+                  }
+                  setSelectedSizeIdx(idx);
+                }}
                 style={[styles.sizeBtn, active && styles.sizeBtnActive]}
               >
                 <View
@@ -257,11 +305,38 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
         <View style={styles.divider} />
 
-        {/* Action Tools: Eraser, Undo, Clear */}
+        {/* Action Tools: Brush, Fill, Eraser, Undo, Clear */}
         <View style={styles.toolGroup}>
           <TouchableOpacity
-            onPress={() => setIsEraser(!isEraser)}
-            style={[styles.actionBtn, isEraser && styles.actionBtnActive]}
+            onPress={() => setActiveTool('brush')}
+            style={[
+              styles.actionBtn,
+              activeTool === 'brush' && styles.actionBtnActive,
+            ]}
+          >
+            <Text style={styles.actionBtnText}>🖌️ Brush</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() =>
+              setActiveTool(activeTool === 'fill' ? 'brush' : 'fill')
+            }
+            style={[
+              styles.actionBtn,
+              activeTool === 'fill' && styles.actionBtnActive,
+            ]}
+          >
+            <Text style={styles.actionBtnText}>🪣 Fill</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() =>
+              setActiveTool(activeTool === 'eraser' ? 'brush' : 'eraser')
+            }
+            style={[
+              styles.actionBtn,
+              activeTool === 'eraser' && styles.actionBtnActive,
+            ]}
           >
             <Text style={styles.actionBtnText}>🧽 Eraser</Text>
           </TouchableOpacity>

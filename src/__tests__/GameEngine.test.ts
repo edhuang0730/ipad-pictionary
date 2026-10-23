@@ -5,7 +5,16 @@ import {
   GameEngine,
   GUESSER_POINTS,
 } from '../engine/GameEngine';
-import { createMaskedWordHint } from '../data/words';
+import {
+  createMaskedWordHint,
+  WORD_BANK,
+  WORD_CATEGORIES,
+} from '../data/words';
+import {
+  computeFloodFillRects,
+  fillRectsToSvgPath,
+} from '../utils/floodFill';
+import { Stroke } from '../types/game';
 
 describe('GameEngine State Machine & Rapid-Fire Rules', () => {
   it('generates masked letter hints without exposing the secret word', () => {
@@ -159,5 +168,111 @@ describe('GameEngine State Machine & Rapid-Fire Rules', () => {
     engine.beginDrawingTurn();
     engine.endCurrentTurn();
     assert.equal(engine.getHostState().phase, 'GAME_OVER');
+  });
+
+  it('contains 100 unique words/phrases for each difficulty level (300 globally unique total)', () => {
+    const easyWords = WORD_BANK.filter((w) => w.difficulty === 'Easy');
+    const mediumWords = WORD_BANK.filter((w) => w.difficulty === 'Medium');
+    const hardWords = WORD_BANK.filter((w) => w.difficulty === 'Hard');
+
+    assert.equal(easyWords.length, 100);
+    assert.equal(mediumWords.length, 100);
+    assert.equal(hardWords.length, 100);
+    assert.equal(WORD_BANK.length, 300);
+
+    // Ensure every single word/phrase across the entire bank is globally unique (case-insensitive)
+    const normalizedSet = new Set(
+      WORD_BANK.map((w) => w.word.trim().toLowerCase())
+    );
+    assert.equal(normalizedSet.size, 300);
+
+    // Ensure balanced distribution: 20 words per category per difficulty
+    const concreteCategories = WORD_CATEGORIES.filter((c) => c !== 'All');
+    for (const category of concreteCategories) {
+      for (const difficulty of ['Easy', 'Medium', 'Hard'] as const) {
+        const count = WORD_BANK.filter(
+          (w) => w.category === category && w.difficulty === difficulty
+        ).length;
+        assert.equal(
+          count,
+          20,
+          `Expected 20 words for ${category} (${difficulty}), found ${count}`
+        );
+      }
+    }
+  });
+
+  it('supports bucket flood-fill on open canvas and bounded shapes with Undo/Clear', () => {
+    // 1. Empty canvas flood fill covers the full normalized [0..1] canvas
+    const fullRects = computeFloodFillRects([], { x: 0.5, y: 0.5 }, '#2563EB');
+    assert.ok(fullRects);
+    assert.equal(fullRects.length, 1);
+    assert.deepEqual(fullRects[0], { x: 0, y: 0, w: 1, h: 1 });
+
+    const svgPath = fillRectsToSvgPath(fullRects, 600, 450);
+    assert.ok(svgPath.startsWith('M'));
+    assert.ok(svgPath.endsWith('Z'));
+
+    // 2. Closed box stroke from (0.25, 0.25) to (0.75, 0.75)
+    const boxStroke: Stroke = {
+      id: 'box_1',
+      color: '#111827',
+      width: 0.015,
+      points: [
+        { x: 0.25, y: 0.25 },
+        { x: 0.75, y: 0.25 },
+        { x: 0.75, y: 0.75 },
+        { x: 0.25, y: 0.75 },
+        { x: 0.25, y: 0.25 },
+      ],
+    };
+
+    // Flood fill inside the box at (0.5, 0.5)
+    const insideRects = computeFloodFillRects(
+      [boxStroke],
+      { x: 0.5, y: 0.5 },
+      '#EF4444'
+    );
+    assert.ok(insideRects && insideRects.length > 0);
+
+    // Every filled rect must stay strictly within the box bounds (not leaking to canvas edges 0 or 1)
+    for (const r of insideRects) {
+      assert.ok(r.x >= 0.24, `Fill leaked left: ${r.x}`);
+      assert.ok(r.y >= 0.24, `Fill leaked top: ${r.y}`);
+      assert.ok(r.x + r.w <= 0.76, `Fill leaked right: ${r.x + r.w}`);
+      assert.ok(r.y + r.h <= 0.76, `Fill leaked bottom: ${r.y + r.h}`);
+    }
+
+    // Re-filling the same interior with the same color is a no-op (returns null)
+    const fillStroke: Stroke = {
+      id: 'fill_1',
+      color: '#EF4444',
+      width: 0,
+      points: [{ x: 0.5, y: 0.5 }],
+      isFill: true,
+      fillRects: insideRects,
+    };
+    const duplicateFill = computeFloodFillRects(
+      [boxStroke, fillStroke],
+      { x: 0.5, y: 0.5 },
+      '#EF4444'
+    );
+    assert.equal(duplicateFill, null);
+
+    // Verify GameEngine stores, clones, and undoes bucket fill strokes properly
+    const engine = new GameEngine();
+    engine.upsertPlayer({ name: 'P1', avatarDataUrl: '' });
+    engine.upsertPlayer({ name: 'P2', avatarDataUrl: '' });
+    engine.startGame();
+    engine.beginDrawingTurn();
+
+    engine.startStroke(boxStroke);
+    engine.startStroke(fillStroke);
+    assert.equal(engine.getHostState().strokes.length, 2);
+    assert.equal(engine.getHostState().strokes[1].isFill, true);
+
+    engine.undoStroke();
+    assert.equal(engine.getHostState().strokes.length, 1);
+    assert.equal(engine.getHostState().strokes[0].id, 'box_1');
   });
 });

@@ -805,6 +805,21 @@ export const PHONE_CLIENT_HTML = `<!DOCTYPE html>
       }
 
       function drawSingleStroke(stroke, w, h) {
+        if (stroke.isFill && stroke.fillRects && stroke.fillRects.length > 0) {
+          liveCtx.save();
+          liveCtx.fillStyle = stroke.color || '#111827';
+          for (var rIdx = 0; rIdx < stroke.fillRects.length; rIdx++) {
+            var r = stroke.fillRects[rIdx];
+            var rx = Math.max(0, r.x * w - 0.35);
+            var ry = Math.max(0, r.y * h - 0.35);
+            var rw = Math.min(w - rx, r.w * w + 0.7);
+            var rh = Math.min(h - ry, r.h * h + 0.7);
+            liveCtx.fillRect(rx, ry, rw, rh);
+          }
+          liveCtx.restore();
+          return;
+        }
+
         var pts = stroke.points;
         if (!pts || pts.length === 0) return;
 

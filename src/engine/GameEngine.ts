@@ -87,6 +87,7 @@ export class GameEngine {
       strokes: this.state.strokes.map((s) => ({
         ...s,
         points: [...s.points],
+        fillRects: s.fillRects ? s.fillRects.map((r) => ({ ...r })) : undefined,
       })),
     };
   }
@@ -390,6 +391,9 @@ export class GameEngine {
     this.state.strokes.push({
       ...stroke,
       points: [...stroke.points],
+      fillRects: stroke.fillRects
+        ? stroke.fillRects.map((r) => ({ ...r }))
+        : undefined,
     });
   }
 
